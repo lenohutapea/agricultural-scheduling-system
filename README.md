@@ -1,5 +1,7 @@
 # Agricultural Scheduling System
 
+[![CI](https://github.com/lenohutapea/agricultural-scheduling-system/actions/workflows/ci.yml/badge.svg)](https://github.com/lenohutapea/agricultural-scheduling-system/actions/workflows/ci.yml)
+
 A PHP + MySQL web app that plans the whole crop cycle for a farm, from planting to harvest. Pick a field, a crop and a planting date, and it generates every task in between: watering, fertilizing, irrigation, weeding, pest checks and harvest.
 
 ![Dashboard showing overdue tasks, today's tasks, the next 7 days and crop progress](docs/screenshot-dashboard.png)
@@ -19,6 +21,7 @@ Small farms usually track their schedule in a notebook or in someone's head. A m
 - **Fields, crops and seasons.** Full create, edit and delete, including cancelling a season, which removes its remaining future tasks.
 - **Multiple user accounts** with password change.
 - **Mobile friendly** and printable.
+- **Runs in Docker** with one command, tested and published by a CI pipeline on every push.
 
 ## How scheduling works
 
@@ -47,6 +50,8 @@ The bundled patterns for rice, corn and red chili are examples to start from. Ad
 - **PHP 8.1+** with no framework
 - **MySQL / MariaDB** through PDO
 - Plain HTML and CSS, no JavaScript build step
+- **Docker** and **Docker Compose** (PHP 8.3 + Apache, MariaDB 11.4)
+- **GitHub Actions** for CI and image publishing to GitHub Container Registry
 
 ### Security
 
@@ -55,6 +60,39 @@ The bundled patterns for rice, corn and red chili are examples to start from. Ad
 - Every form carries a CSRF token
 - All output escaped with `htmlspecialchars`
 - Session ID regenerated on login; session cookie is `HttpOnly` and `SameSite=Lax`
+
+## DevOps
+
+### Pipeline
+
+Every push and pull request runs the pipeline in [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
+
+```mermaid
+flowchart LR
+    A[Push to GitHub] --> B[Lint every PHP file]
+    B --> C[Unit tests]
+    C --> D[Build Docker image]
+    D --> E[Start app + MariaDB]
+    E --> F[Smoke tests:<br/>health, login page,<br/>blocked internal files]
+    F --> G[Integration test:<br/>generate a rice season<br/>on real MariaDB]
+    G --> H{main branch?}
+    H -- yes --> I[Publish image to<br/>ghcr.io]
+```
+
+- **Unit tests** ([`tests/run.php`](tests/run.php)) cover schedule generation, date math, and the security helpers.
+- **Integration test** ([`tests/integration.php`](tests/integration.php)) runs inside the container against MariaDB: it creates a rice season, checks that exactly 29 tasks land on the right dates, then verifies cascade delete.
+- **Health endpoint** `/healthz.php` returns `{"status":"ok"}` only when PHP and the database both respond. Docker uses it as the container healthcheck.
+- The image runs with production `php.ini`, hides version headers, sends basic security headers, and refuses direct requests to `includes/` and config files.
+
+### Roadmap
+
+- [x] Containerize the app with Docker and Docker Compose
+- [x] CI: lint, unit tests, container build, smoke and integration tests
+- [x] Publish the image to GitHub Container Registry
+- [ ] Provision an Oracle Cloud VM with OpenTofu (infrastructure as code)
+- [ ] Continuous deployment to the VM from GitHub Actions
+- [ ] Nginx reverse proxy with HTTPS
+- [ ] Monitoring with Prometheus and Grafana
 
 ## Data model
 
@@ -84,7 +122,27 @@ erDiagram
 
 ## Getting started
 
-### Ubuntu
+### With Docker (recommended)
+
+Requires Docker with the Compose plugin.
+
+```bash
+git clone https://github.com/lenohutapea/agricultural-scheduling-system.git
+cd agricultural-scheduling-system
+cp .env.example .env        # then change the passwords in .env
+docker compose up -d --build
+```
+
+Open `http://localhost:8080`. On the first visit you are asked to create the first account. The database schema and sample crops load automatically on the first start.
+
+| Command | What it does |
+| --- | --- |
+| `docker compose ps` | show container status and health |
+| `docker compose logs -f app` | follow the app logs |
+| `docker compose down` | stop, keeping the data |
+| `docker compose down -v` | stop and delete the data |
+
+### Without Docker (Ubuntu)
 
 ```bash
 sudo apt update
@@ -93,28 +151,46 @@ sudo apt install -y php-cli php-mysql mariadb-server
 git clone https://github.com/lenohutapea/agricultural-scheduling-system.git
 cd agricultural-scheduling-system
 
-# create the database, tables and sample crops
 sudo mysql < database.sql
-
-# create a database user for the app
 sudo mysql -e "CREATE USER 'pertanian'@'localhost' IDENTIFIED BY 'choose-a-password'; GRANT ALL ON pertanian.* TO 'pertanian'@'localhost';"
 
-# create your config and put the same user and password in it
-cp config.example.php config.php
-nano config.php
+# local credentials, ignored by git
+cat > config.local.php <<'PHP'
+<?php
+define('DB_USER', 'pertanian');
+define('DB_PASS', 'choose-a-password');
+PHP
 
 php -S 0.0.0.0:8000
 ```
 
-Open `http://localhost:8000`. On the first visit you are asked to create the first account.
+Open `http://localhost:8000`.
 
-### Windows (XAMPP)
+### Without Docker (Windows, XAMPP)
 
 1. Clone or download this repository into `C:\xampp\htdocs\agricultural-scheduling-system`.
 2. Start **Apache** and **MySQL** in the XAMPP Control Panel.
 3. In `http://localhost/phpmyadmin`, open **Import** and import `database.sql`.
-4. Copy `config.example.php` to `config.php`. The defaults already match XAMPP (user `root`, no password).
-5. Open `http://localhost/agricultural-scheduling-system`.
+4. Open `http://localhost/agricultural-scheduling-system`. The default settings already match XAMPP (user `root`, no password).
+
+### Configuration
+
+Settings are read from environment variables, then from an optional `config.local.php`, then fall back to XAMPP defaults. See [`config.php`](config.php).
+
+| Variable | Default |
+| --- | --- |
+| `DB_HOST` | `127.0.0.1` |
+| `DB_PORT` | `3306` |
+| `DB_NAME` | `pertanian` |
+| `DB_USER` | `root` |
+| `DB_PASS` | *(empty)* |
+| `APP_TIMEZONE` | `Asia/Jakarta` |
+
+### Running the tests
+
+```bash
+php tests/run.php
+```
 
 ## Project structure
 
@@ -130,15 +206,24 @@ Open `http://localhost:8000`. On the first visit you are asked to create the fir
 ├── tugas_aksi.php        task actions: done, reschedule, delete, add
 ├── akun.php              users and password
 ├── login.php, logout.php
-├── config.example.php    database settings template
+├── healthz.php           health check endpoint
+├── config.php            settings from environment variables
 ├── database.sql          schema and sample crops
 ├── assets/style.css
-└── includes/
-    ├── bootstrap.php     loaded by every page
-    ├── db.php            PDO connection
-    ├── functions.php     security, flash messages, date helpers
-    ├── jadwal.php        schedule generation logic
-    └── layout.php        page layout and shared components
+├── includes/
+│   ├── bootstrap.php     loaded by every page
+│   ├── db.php            PDO connection
+│   ├── functions.php     security, flash messages, date helpers
+│   ├── jadwal.php        schedule generation logic
+│   └── layout.php        page layout and shared components
+├── tests/
+│   ├── run.php           unit tests
+│   └── integration.php   database integration test
+├── Dockerfile
+├── docker-compose.yml
+├── docker/apache.conf    Apache hardening
+├── .env.example          Docker Compose settings template
+└── .github/workflows/ci.yml
 ```
 
 ## Background

@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_mysql
+          coverage: none
+
+      - name: PHP syntax check
+        run: find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+
+      - name: Unit tests
+        run: php tests/run.php
+
+  docker:
+    name: Build and test the container
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env with random passwords
+        run: |
+          {
+            echo "DB_USER=pertanian"
+            echo "DB_PASS=$(openssl rand -hex 16)"
+            echo "DB_ROOT_PASS=$(openssl rand -hex 16)"
+            echo "APP_PORT=8080"
+          } > .env
+
+      - name: Build and start app + MariaDB
+        run: docker compose up -d --build --wait --wait-timeout 180
+
+      - name: Health endpoint reports ok
+        run: curl -fsS http://localhost:8080/healthz.php | grep '"status":"ok"'
+
+      - name: Login page offers first-account setup
+        run: curl -fsS http://localhost:8080/login.php | grep -q 'Buat akun pertama'
+
+      - name: Internal files are not served
+        run: |
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/includes/db.php)" = "403"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/config.php)" = "403"
+
+      - name: Integration test against MariaDB
+        run: |
+          docker compose cp tests app:/var/www/html/tests
+          docker compose exec -T app php tests/integration.php
+
+      - name: Show container logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop and remove containers
+        if: always()
+        run: docker compose down -v
+
+  publish:
+    name: Publish image to GitHub Container Registry
+    needs: docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}

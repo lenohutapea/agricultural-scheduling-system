@@ -1,1 +1,3 @@
-config.php
+# local settings and secrets
+config.local.php
+.env
