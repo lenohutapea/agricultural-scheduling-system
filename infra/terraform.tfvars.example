@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and set your own passwords (at least 12 characters):
+#   cp terraform.tfvars.example terraform.tfvars
+# terraform.tfvars is ignored by git.
+
+db_password            = "change-me-db-password"
+db_root_password       = "change-me-root-password"
+grafana_admin_password = "change-me-grafana-password"
+
+# Optional
+# http_port            = 8080
+# grafana_port         = 3000
+# enable_public_tunnel = true

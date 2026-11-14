@@ -84,6 +84,10 @@ flowchart LR
 - **Health endpoint** `/healthz.php` returns `{"status":"ok"}` only when PHP and the database both respond. Docker uses it as the container healthcheck.
 - The image runs with production `php.ini`, hides version headers, sends basic security headers, and refuses direct requests to `includes/` and config files.
 
+### Running it as a server
+
+The [`infra/`](infra/) folder runs the app on a Docker host with OpenTofu: Nginx in front, Prometheus and Grafana for monitoring, and an optional public HTTPS address through Cloudflare Tunnel. See [`infra/README.md`](infra/README.md).
+
 ### Roadmap
 
 - [x] Containerize the app with Docker and Docker Compose
@@ -223,6 +227,7 @@ php tests/run.php
 ├── docker-compose.yml
 ├── docker/apache.conf    Apache hardening
 ├── .env.example          Docker Compose settings template
+├── infra/                OpenTofu: run the stack with Nginx and monitoring
 └── .github/workflows/ci.yml
 ```
 

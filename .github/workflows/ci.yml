@@ -70,9 +70,26 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  infra:
+    name: Validate OpenTofu code
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: opentofu/setup-opentofu@v1
+
+      - name: Download the Docker provider
+        run: tofu init -input=false
+
+      - name: Validate configuration
+        run: tofu validate
+
   publish:
     name: Publish image to GitHub Container Registry
-    needs: docker
+    needs: [docker, infra]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

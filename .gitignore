@@ -1,3 +1,9 @@
 # local settings and secrets
 config.local.php
 .env
+
+# OpenTofu: local state and secrets
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/terraform.tfvars
