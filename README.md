@@ -52,6 +52,7 @@ The bundled patterns for rice, corn and red chili are examples to start from. Ad
 - Plain HTML and CSS, no JavaScript build step
 - **Docker** and **Docker Compose** (PHP 8.3 + Apache, MariaDB 11.4)
 - **GitHub Actions** for CI and image publishing to GitHub Container Registry
+- **OpenTofu** (infrastructure as code), **Nginx**, **Prometheus**, **Grafana** and **Cloudflare Tunnel** for running it as a server
 
 ### Security
 
@@ -86,17 +87,23 @@ flowchart LR
 
 ### Running it as a server
 
-The [`infra/`](infra/) folder runs the app on a Docker host with OpenTofu: Nginx in front, Prometheus and Grafana for monitoring, and an optional public HTTPS address through Cloudflare Tunnel. See [`infra/README.md`](infra/README.md).
+The [`infra/`](infra/) folder runs the whole system on a Docker host with OpenTofu. One `tofu apply` creates the network, volumes and seven containers: MariaDB, the app, Nginx as reverse proxy, and a monitoring stack of Prometheus, Grafana, node-exporter and blackbox-exporter. An optional Cloudflare Tunnel gives it a public HTTPS address. Details in [`infra/README.md`](infra/README.md).
+
+![Grafana dashboard: app status UP, 100% uptime, 3 ms response time, disk, CPU and memory usage](docs/screenshot-grafana.png)
+
+Grafana probes the app's health endpoint through Nginx every 15 seconds and tracks uptime, response time, and the host's CPU, memory and disk.
 
 ### Roadmap
 
 - [x] Containerize the app with Docker and Docker Compose
 - [x] CI: lint, unit tests, container build, smoke and integration tests
 - [x] Publish the image to GitHub Container Registry
-- [ ] Provision an Oracle Cloud VM with OpenTofu (infrastructure as code)
-- [ ] Continuous deployment to the VM from GitHub Actions
-- [ ] Nginx reverse proxy with HTTPS
-- [ ] Monitoring with Prometheus and Grafana
+- [x] Infrastructure as code with OpenTofu: network, volumes and seven containers
+- [x] Nginx reverse proxy with login rate limiting
+- [x] Monitoring with Prometheus and Grafana (uptime, response time, CPU, memory, disk)
+- [x] Public HTTPS address through Cloudflare Tunnel
+- [ ] Continuous deployment: a self-hosted runner runs `tofu apply` after each new image
+- [ ] Alerts when the app goes down or the disk fills up
 
 ## Data model
 

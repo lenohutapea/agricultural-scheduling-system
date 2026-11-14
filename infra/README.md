@@ -71,6 +71,8 @@ This deletes the containers, the network and the volumes, including the database
 
 ## Monitoring
 
+![Grafana dashboard](../docs/screenshot-grafana.png)
+
 Grafana opens on the **Agricultural Scheduling System** dashboard:
 
 - **App status** and **availability**: Prometheus asks the blackbox exporter to request `/healthz.php` through Nginx every 15 seconds. The endpoint answers `200` only when PHP and the database both work.
